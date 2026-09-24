@@ -23,8 +23,10 @@ Teaches your agent to check text for safety, personal data, self-harm, sexual co
 Any agent that uses the open skills format (Claude Code, Cursor, Codex, OpenClaw and others):
 
 ```bash
-npx skills add frod27/overwing-skill
+npx skills add frod27/overwing-skill --agent claude-code -y
 ```
+
+Pass your own agent name to `--agent` (`openclaw`, `cursor`, `codex`, or `'*'` for every agent it knows). Without `--agent` and `-y` the installer prompts, which fails when there is no terminal.
 
 
 
