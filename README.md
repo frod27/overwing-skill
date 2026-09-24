@@ -20,6 +20,14 @@ Teaches your agent to check text for safety, personal data, self-harm, sexual co
 
 ## Install
 
+Any agent that uses the open skills format (Claude Code, Cursor, Codex, OpenClaw and others):
+
+```bash
+npx skills add frod27/overwing-skill
+```
+
+
+
 ```bash
 clawhub install overwing
 ```
