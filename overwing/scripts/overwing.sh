@@ -6,12 +6,17 @@ set -euo pipefail
 
 BASE_URL="${OVERWING_BASE_URL:-https://overwing.ai}"
 RULE_SET="content-safety"
+CONTEXT=""
 
 usage() {
   cat >&2 <<USAGE
 Usage:
-  overwing.sh evaluate [--rule-set <slug>] "<text>"     score one text (or read text from stdin with "-")
-  overwing.sh batch    [--rule-set <slug>]              JSON lines on stdin: {"id":"a","input":"..."}
+  overwing.sh evaluate [--rule-set <slug>] [--context '<json>'] "<text>"
+                                                        score one text (or read text from stdin with "-")
+  overwing.sh batch    [--rule-set <slug>] [--context '<json>']
+                                                        JSON lines on stdin: {"id":"a","input":"..."}
+  --context is a JSON object of facts the rules may read (recipient, channel,
+  owns_contact_info, sender, purpose); pair it with --rule-set outbound-message.
   overwing.sh usage                                     today's quota and remaining checks
   overwing.sh whoami                                    which organization this key belongs to
   overwing.sh signup <email> <password>                 create an account and print the API key (once)
@@ -25,6 +30,12 @@ json_escape() {
   python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || {
     local s; s=$(cat); s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}; s=${s//$'\t'/\\t}; printf '"%s"' "$s"
   }
+}
+
+context_field() {
+  # Emits ,"context":<json> when --context was given (must be a JSON object).
+  [ -z "$CONTEXT" ] && return 0
+  case "$CONTEXT" in \{*\}) printf ',"context":%s' "$CONTEXT" ;; *) echo '{"error":"--context must be a JSON object, e.g. {\"recipient\":\"customer\"}"}' >&2; exit 2 ;; esac
 }
 
 require_key() {
@@ -41,10 +52,10 @@ call() {
   if [ -n "$body" ]; then
     code=$(curl -sS -m 60 -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path" \
       -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Content-Type: application/json" -H "Accept: application/json" \
-      -H "User-Agent: overwing-skill/1.0 (openclaw)" --data-binary "$body")
+      -H "User-Agent: overwing-skill/1.1 (openclaw)" --data-binary "$body")
   else
     code=$(curl -sS -m 60 -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path" \
-      -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.0 (openclaw)")
+      -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.1 (openclaw)")
   fi
   if [ "${code:0:1}" = "2" ]; then cat "$tmp"; echo; rm -f "$tmp"; return 0; fi
   cat "$tmp" >&2; echo >&2; rm -f "$tmp"; return 1
@@ -57,20 +68,21 @@ case "$cmd" in
     while [ $# -gt 0 ]; do
       case "$1" in
         --rule-set) RULE_SET="$2"; shift 2 ;;
+        --context) CONTEXT="$2"; shift 2 ;;
         -) text=$(cat); shift ;;
         *) text="$1"; shift ;;
       esac
     done
     [ -n "${text:-}" ] || usage
-    body=$(printf '{"input":%s,"rule_set":%s,"metadata":{"source":"openclaw-skill"}}' "$(printf '%s' "$text" | json_escape)" "$(printf '%s' "$RULE_SET" | json_escape)")
+    body=$(printf '{"input":%s,"rule_set":%s,"metadata":{"source":"openclaw-skill"}%s}' "$(printf '%s' "$text" | json_escape)" "$(printf '%s' "$RULE_SET" | json_escape)" "$(context_field)")
     call POST /api/v1/evaluate "$body"
     ;;
   batch)
     require_key
-    while [ $# -gt 0 ]; do case "$1" in --rule-set) RULE_SET="$2"; shift 2 ;; *) usage ;; esac; done
+    while [ $# -gt 0 ]; do case "$1" in --rule-set) RULE_SET="$2"; shift 2 ;; --context) CONTEXT="$2"; shift 2 ;; *) usage ;; esac; done
     items=$(grep -v '^\s*$' | paste -sd, -)
     [ -n "$items" ] || usage
-    call POST /api/v1/evaluate/batch "{\"rule_set\":$(printf '%s' "$RULE_SET" | json_escape),\"items\":[$items]}"
+    call POST /api/v1/evaluate/batch "{\"rule_set\":$(printf '%s' "$RULE_SET" | json_escape),\"items\":[$items]$(context_field)}"
     ;;
   usage) require_key; call GET "/api/v1/usage?days=1" ;;
   whoami) require_key; call GET /api/v1/me ;;

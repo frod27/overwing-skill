@@ -1,6 +1,6 @@
 ---
 name: overwing
-description: Check any text for safety, personal data, self-harm, sexual content and severity before you send it, act on it, or show it to a person. One API call returns pass / fail / review per rule with calibrated confidence in under 500 ms. Use for moderating model output, screening incoming messages, or scoring drafts. Works with an API key or, for wallet-holding agents, pay-per-request in USDC with no account.
+description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, or scoring drafts. Works with an API key or, for wallet-holding agents, pay-per-request in USDC with no account.
 homepage: https://overwing.ai
 metadata:
   {
@@ -16,10 +16,11 @@ metadata:
 
 # Overwing
 
-Overwing scores text and returns a typed verdict. Use it as a guardrail: before
+Overwing scores text and returns a typed verdict plus one word to act on. Use it as a guardrail: before
 you send a reply, post content, act on an untrusted message, or hand something
-to a person, evaluate it. `fail` means block or rewrite. `review` means a rule
-was unsure: ask your human or take the cautious path. `pass` means go ahead.
+to a person, evaluate it. Read `recommended_action`: `block` means do not send,
+`redact` means remove the flagged content and check again, `review` means ask
+your human or take the cautious path, `allow` means go ahead.
 
 ## When to use this skill
 
@@ -56,21 +57,34 @@ If you hold a funded wallet on Base and have no key, see "Paying per request" be
 Returns JSON:
 
 ```json
-{ "id": "eval_…", "verdict": "fail", "aggregate_score": 0.82, "confidence": 0.97, "latency_ms": 251,
-  "results": [ { "rule": "pii_detected", "type": "noul", "answer": true, "probability": 0.99, "confidence": 0.98, "verdict": "fail" }, … ] }
+{ "id": "eval_…", "verdict": "fail", "recommended_action": "redact", "aggregate_score": 0.82, "confidence": 0.97, "latency_ms": 251,
+  "results": [ { "rule": "pii_detected", "type": "noul", "answer": true, "probability": 0.99, "confidence": 0.98, "verdict": "fail", "action": "redact" }, … ] }
 ```
 
-How to act on it:
+How to act on it. `recommended_action` is the one field to branch on:
 
-| verdict | meaning | what to do |
+| recommended_action | meaning | what to do |
 | --- | --- | --- |
-| `fail` | a rule's fail condition matched | do not send; rewrite without the flagged content, or tell your human what was flagged and why |
-| `review` | no rule failed, but one was unsure (confidence under its threshold) | ask your human, or take the safer option |
-| `pass` | nothing tripped | proceed |
+| `block` | a rule with action `block` failed | do not send; tell your human what was flagged and why, or rewrite from scratch |
+| `redact` | only rules with action `redact` failed (personal data, usually) | remove the flagged content, then evaluate the new text again |
+| `review` | no rule failed outright, but one was unsure, or a `review` rule failed | ask your human, or take the safer option |
+| `allow` | nothing tripped | proceed |
 
-`results[].rule` names the rule; the prebuilt set has `toxicity`, `pii_detected`, `self_harm`, `sexual_content`, `severity`. `confidence` is 0 to 1. Read the rule list before deciding: a `fail` on `pii_detected` with a `pass` on everything else means "remove the personal data", not "the message is hostile".
+`verdict` is the coarser signal (`fail` / `review` / `pass`). `results[].rule` names each rule and `results[].action` says what that rule asks for when it fails. `confidence` is 0 to 1. The `content-safety` set has `toxicity`, `pii_detected` (redact), `self_harm`, `sexual_content`, `severity`.
 
 Pass a different rule set with `--rule-set <slug>`; the default is `content-safety`.
+
+## Tell it who the message is for (context)
+
+Personal data is not always a leak: a customer's own phone number in a reply to that customer is fine. Pass what you know as `--context` JSON and use the `outbound-message` rule set, whose rules read it:
+
+```bash
+{baseDir}/scripts/overwing.sh evaluate --rule-set outbound-message \
+  --context '{"recipient":"the customer who asked for a callback","channel":"email","owns_contact_info":true,"sender":"support agent"}' \
+  "Hi Dana, I can call you at 555-0142 tomorrow at 10."
+```
+
+Useful keys: `recipient` (who will read it), `channel` (email, chat, public post, sms), `owns_contact_info` (true if the recipient already owns the personal data in the text), `sender`, `purpose`. Any JSON object up to 8 KB works; the rules quote it back in their reasoning. The `outbound-message` set adds `unauthorized_pii` (redact) and `confidential_leak` (block: internal notes, credentials, pricing not meant for this recipient) to the safety checks. Without context, treat every personal detail as unauthorized and redact it.
 
 ## Evaluate many texts at once
 
@@ -80,7 +94,7 @@ Up to 50 per call, one line of JSON per item on stdin:
 printf '%s\n' '{"id":"a","input":"first"}' '{"id":"b","input":"second"}' | {baseDir}/scripts/overwing.sh batch
 ```
 
-Returns a summary plus per-item verdicts. Each item counts as one check.
+Returns a summary plus per-item verdicts and recommended actions. Each item counts as one check. `--context` applies to every item; an item can carry its own `"context": {…}` to override it.
 
 ## Limits and errors
 
@@ -102,7 +116,7 @@ Check remaining quota:
 
 ## Custom rules
 
-Your human can define rules in plain language (yes/no questions, classifications, or scored scales) at https://overwing.ai/dashboard/rule-sets or via `POST /api/v1/rule-sets`. Then pass the slug with `--rule-set`. `GET https://overwing.ai/api/v1/rule-sets/content-safety` is a complete example to copy from.
+Your human can define rules in plain language (yes/no questions, classifications, or scored scales) at https://overwing.ai/dashboard/rule-sets or via `POST /api/v1/rule-sets`. Each rule carries an `action` (`block`, `redact`, or `review`) and may reference `context.*` fields in its wording. Then pass the slug with `--rule-set`. `GET https://overwing.ai/api/v1/rule-sets/outbound-message` is a complete context-aware example to copy from.
 
 ## More
 
@@ -111,4 +125,4 @@ Your human can define rules in plain language (yes/no questions, classifications
 - Prefer MCP? `npx -y overwing-mcp` exposes the same calls as tools.
 - Node or Python SDKs: `npm install overwing`, `pip install overwing`.
 
-Verdicts are signals from a calibrated model, not guarantees. When the stakes are high and the verdict is not a clear `pass`, involve your human.
+Verdicts are signals from a calibrated model, not guarantees. When the stakes are high and the recommended action is not `allow`, involve your human.
