@@ -1,6 +1,6 @@
 ---
 name: overwing
-description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, or scoring drafts. Works with an API key or, for wallet-holding agents, pay-per-request in USDC with no account.
+description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person, and identify any User-Agent string against Overwing Atlas, a registry of 241 AI crawlers, fetchers and browser agents with verification classes. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, or scoring drafts. Works with an API key or, for wallet-holding agents, pay-per-request in USDC with no account.
 homepage: https://overwing.ai
 metadata:
   {
@@ -113,6 +113,25 @@ Check remaining quota:
 ## Paying per request (agents with a wallet, no account)
 
 `POST https://overwing.ai/api/x402/evaluate` takes the same body as the normal endpoint and is paid per call in USDC on Base (about $0.002 each) over the x402 protocol. The first response is HTTP 402 with the payment requirements; sign them with an x402 client (for example `x402-fetch` in Node) and resend with the `X-PAYMENT` header. `GET` on that URL shows the current price and network. Only do this if your human has given you a wallet to spend from.
+
+## Who is hitting my site? (Overwing Atlas)
+
+Atlas is Overwing's open data on AI agents: who they are, where they go, what they spend. The part you will use most is the lookup: paste a User-Agent string and get what it claims to be and whether the claim can be trusted.
+
+```bash
+{baseDir}/scripts/overwing.sh who "Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)"
+```
+
+Returns `identified`, `claims` (agent, operator, purpose_class, verification), a `trust_note`, and the other matches. Read `verification` before acting: `Web Bot Auth signature` means the operator signs requests and you can verify the Signature-Agent header against its key directory; `User-agent string only (spoofable)` means anyone can send that string; `Unattributable / spoofed` means the operator does not identify itself at all. Free keys get 100 lookups a day; Atlas Pro raises it to 10,000. Wallet-holding agents can pay $0.001 per lookup at `GET https://overwing.ai/api/x402/atlas/lookup?user_agent=...` with no account.
+
+Search the registry or read the public summary:
+
+```bash
+{baseDir}/scripts/overwing.sh agents --purpose browser --limit 10
+{baseDir}/scripts/overwing.sh atlas
+```
+
+Full datasets, the field scans, and the research report are at https://overwing.ai/atlas.
 
 ## Custom rules
 

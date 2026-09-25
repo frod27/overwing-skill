@@ -21,6 +21,10 @@ Usage:
   overwing.sh whoami                                    which organization this key belongs to
   overwing.sh signup <email> <password>                 create an account and print the API key (once)
   overwing.sh terms                                     pay-per-request price and network (x402)
+  overwing.sh who "<user-agent string>"                 Atlas: what a User-Agent claims to be and whether to trust it
+  overwing.sh agents [--q text] [--purpose p] [--operator o] [--limit n]
+                                                        Atlas: search the registry of AI crawlers, fetchers and browser agents
+  overwing.sh atlas                                     Atlas: registry counts, traffic shares, field-scan headlines (no key)
 USAGE
   exit 2
 }
@@ -52,10 +56,10 @@ call() {
   if [ -n "$body" ]; then
     code=$(curl -sS -m 60 -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path" \
       -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Content-Type: application/json" -H "Accept: application/json" \
-      -H "User-Agent: overwing-skill/1.1 (openclaw)" --data-binary "$body")
+      -H "User-Agent: overwing-skill/1.2 (openclaw)" --data-binary "$body")
   else
     code=$(curl -sS -m 60 -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path" \
-      -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.1 (openclaw)")
+      -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.2 (openclaw)")
   fi
   if [ "${code:0:1}" = "2" ]; then cat "$tmp"; echo; rm -f "$tmp"; return 0; fi
   cat "$tmp" >&2; echo >&2; rm -f "$tmp"; return 1
@@ -92,5 +96,17 @@ case "$cmd" in
     OVERWING_API_KEY="" call POST /api/v1/signup "$body"
     ;;
   terms) OVERWING_API_KEY="" call GET /api/x402/evaluate ;;
+  who)
+    require_key
+    [ $# -ge 1 ] || usage
+    ua=$(printf '%s' "$1" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$1" | sed 's/ /%20/g; s/;/%3B/g; s/(/%28/g; s/)/%29/g; s/+/%2B/g')
+    call GET "/api/v1/atlas/lookup?user_agent=$ua"
+    ;;
+  agents)
+    qs="limit=20"
+    while [ $# -gt 0 ]; do case "$1" in --q) qs="$qs&q=$(printf '%s' "$2" | sed 's/ /%20/g')"; shift 2 ;; --purpose) qs="$qs&purpose=$2"; shift 2 ;; --operator) qs="$qs&operator=$2"; shift 2 ;; --limit) qs="${qs/limit=20/limit=$2}"; shift 2 ;; *) usage ;; esac; done
+    call GET "/api/v1/atlas/agents?$qs"
+    ;;
+  atlas) OVERWING_API_KEY="" call GET /api/v1/atlas/summary ;;
   *) usage ;;
 esac
