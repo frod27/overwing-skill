@@ -8,7 +8,7 @@
 </p>
 
 <p align="center"><strong>Overwing skill for OpenClaw.</strong><br>
-Teaches your agent to check text for safety, personal data, self-harm, sexual content and severity before it sends, posts, or acts on it. Verdicts are <code>pass</code> / <code>fail</code> / <code>review</code> with calibrated confidence, in under 500 ms.</p>
+Teaches your agent to check text for safety, personal data, self-harm, sexual content and severity before it sends, posts, or acts on it, to identify bots by their User-Agent, and to operate legacy systems through Overwing Tower. Verdicts are <code>pass</code> / <code>fail</code> / <code>review</code> with calibrated confidence, in under 500 ms.</p>
 
 <p align="center">
   <a href="https://clawhub.com/skills/overwing"><img alt="ClawHub" src="https://img.shields.io/badge/ClawHub-overwing-0B1220"></a>
@@ -42,8 +42,10 @@ Then give the agent a key: set `OVERWING_API_KEY` (free at [overwing.ai/login](h
 - **How** to check: `scripts/overwing.sh evaluate "<text>"`, batches of up to 50, and how to read the per-rule results.
 - **What to do** with each verdict: rewrite or block on `fail`, ask the human on `review`, proceed on `pass`.
 - How limits and errors work, and how to pay per request over x402 if it has a wallet.
+- **Who is hitting a site**: `scripts/overwing.sh who "<user-agent>"` identifies a bot and says whether its claim can be verified. No key needed, 10 a day.
+- **How to operate a legacy system safely** through [Overwing Tower](https://overwing.ai/products/tower): read its capabilities, submit a typed action with an idempotency key, and act on the ruling. It waits when a person must approve and does not retry a rejection.
 
-The skill is a single `SKILL.md` plus a small bash helper that needs only `curl`. Read it: [overwing/SKILL.md](overwing/SKILL.md).
+The skill is a single `SKILL.md` plus a small bash helper that needs only `curl`. Read it: [skills/overwing/SKILL.md](skills/overwing/SKILL.md).
 
 ## Also from Overwing
 

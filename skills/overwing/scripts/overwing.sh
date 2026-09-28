@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Overwing helper for agents. Requires curl. Uses OVERWING_API_KEY unless the
-# subcommand is `signup`. Prints JSON to stdout; non-2xx responses exit 1 with
-# the API's {"error": "..."} body on stderr.
+# Overwing helper for agents. Requires curl. Prints JSON to stdout; non-2xx
+# responses exit 1 with the API's error body on stderr.
+#   OVERWING_API_KEY    organization key (ow_live_...): guardrails, Tower setup, higher Atlas limits
+#   OVERWING_AGENT_KEY  agent key (ow_agent_...): Tower operations
+# `who`, `agents`, `atlas`, `terms` and `signup` need no key.
 set -euo pipefail
 
 BASE_URL="${OVERWING_BASE_URL:-https://overwing.ai}"
@@ -22,9 +24,25 @@ Usage:
   overwing.sh signup <email> <password>                 create an account and print the API key (once)
   overwing.sh terms                                     pay-per-request price and network (x402)
   overwing.sh who "<user-agent string>"                 Atlas: what a User-Agent claims to be and whether to trust it
+                                                        (no key needed: 10 a day; with OVERWING_API_KEY: 100 a day)
   overwing.sh agents [--q text] [--purpose p] [--operator o] [--limit n]
                                                         Atlas: search the registry of AI crawlers, fetchers and browser agents
   overwing.sh atlas                                     Atlas: registry counts, traffic shares, field-scan headlines (no key)
+
+  Tower setup (OVERWING_API_KEY):
+  overwing.sh tower setup                               load the starter workflow (email PO to order entry)
+  overwing.sh tower agent-create <name> <scope,scope>   create an agent; prints its key once ("*" = every operation)
+  overwing.sh tower agents                              list agents (keys are never shown)
+  overwing.sh tower agent-revoke <agent_id>             revoke an agent at once
+  Tower operations (OVERWING_AGENT_KEY):
+  overwing.sh tower capabilities                        operations you may call, with JSON Schema inputs
+  overwing.sh tower decide <operation> '<input json>'   how it would be ruled; no side effects
+  overwing.sh tower submit <operation> '<input json>' --key <idempotency-key> [--dry-run]
+                                                        executed, pending (a person must approve) or rejected
+  overwing.sh tower get <action_id>                     status and result
+  overwing.sh tower compensate <action_id>              undo an executed action, once
+  overwing.sh tower receipt <id|sequence>               one signed receipt
+  overwing.sh tower verify [from] [to]                  recompute the receipt chain's hashes and signatures
 USAGE
   exit 2
 }
@@ -49,19 +67,37 @@ require_key() {
   fi
 }
 
+require_agent_key() {
+  if [ -z "${OVERWING_AGENT_KEY:-}" ]; then
+    echo '{"error":{"code":"unauthorized","message":"OVERWING_AGENT_KEY is not set","retryable":false,"suggested_fix":"Ask your human for an agent key, or with an organization key run: overwing.sh tower agent-create <name> <scopes>"}}' >&2
+    exit 1
+  fi
+}
+
+require_object() {
+  # require_object <json> <what>
+  case "$1" in \{*\}) ;; *) printf '{"error":"%s must be a JSON object"}\n' "$2" >&2; exit 2 ;; esac
+}
+
+urlencode() {
+  python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || sed 's/%/%25/g; s/ /%20/g; s/;/%3B/g; s/(/%28/g; s/)/%29/g; s/+/%2B/g; s/&/%26/g; s/#/%23/g; s/?/%3F/g; s/\//%2F/g'
+}
+
+# The credential `call` sends. Empty means no Authorization header at all (keyless).
+TOKEN="${OVERWING_API_KEY:-}"
+# Extra HTTP statuses whose body is an answer, not an error (space separated).
+ACCEPT=""
+
 call() {
   # call <method> <path> [json-body]
   local method="$1" path="$2" body="${3:-}" tmp code
+  local -a args=(-sS -m 60 -X "$method" "$BASE_URL$path" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.3 (openclaw)")
+  [ -n "$TOKEN" ] && args+=(-H "Authorization: Bearer $TOKEN")
+  [ -n "$body" ] && args+=(-H "Content-Type: application/json" --data-binary "$body")
   tmp=$(mktemp)
-  if [ -n "$body" ]; then
-    code=$(curl -sS -m 60 -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path" \
-      -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Content-Type: application/json" -H "Accept: application/json" \
-      -H "User-Agent: overwing-skill/1.2 (openclaw)" --data-binary "$body")
-  else
-    code=$(curl -sS -m 60 -o "$tmp" -w '%{http_code}' -X "$method" "$BASE_URL$path" \
-      -H "Authorization: Bearer ${OVERWING_API_KEY:-}" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.2 (openclaw)")
-  fi
+  code=$(curl "${args[@]}" -o "$tmp" -w '%{http_code}')
   if [ "${code:0:1}" = "2" ]; then cat "$tmp"; echo; rm -f "$tmp"; return 0; fi
+  case " $ACCEPT " in *" $code "*) cat "$tmp"; echo; rm -f "$tmp"; return 0 ;; esac
   cat "$tmp" >&2; echo >&2; rm -f "$tmp"; return 1
 }
 
@@ -93,20 +129,63 @@ case "$cmd" in
   signup)
     [ $# -ge 2 ] || usage
     body=$(printf '{"email":%s,"password":%s,"org_name":"OpenClaw agent"}' "$(printf '%s' "$1" | json_escape)" "$(printf '%s' "$2" | json_escape)")
-    OVERWING_API_KEY="" call POST /api/v1/signup "$body"
+    TOKEN="" call POST /api/v1/signup "$body"
     ;;
-  terms) OVERWING_API_KEY="" call GET /api/x402/evaluate ;;
+  terms) TOKEN="" call GET /api/x402/evaluate ;;
   who)
-    require_key
+    # No key needed. A key, when set, raises the daily allowance.
     [ $# -ge 1 ] || usage
-    ua=$(printf '%s' "$1" | python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=""))' 2>/dev/null || printf '%s' "$1" | sed 's/ /%20/g; s/;/%3B/g; s/(/%28/g; s/)/%29/g; s/+/%2B/g')
-    call GET "/api/v1/atlas/lookup?user_agent=$ua"
+    call GET "/api/v1/atlas/lookup?user_agent=$(printf '%s' "$1" | urlencode)"
     ;;
   agents)
     qs="limit=20"
-    while [ $# -gt 0 ]; do case "$1" in --q) qs="$qs&q=$(printf '%s' "$2" | sed 's/ /%20/g')"; shift 2 ;; --purpose) qs="$qs&purpose=$2"; shift 2 ;; --operator) qs="$qs&operator=$2"; shift 2 ;; --limit) qs="${qs/limit=20/limit=$2}"; shift 2 ;; *) usage ;; esac; done
+    while [ $# -gt 0 ]; do case "$1" in --q) qs="$qs&q=$(printf '%s' "$2" | urlencode)"; shift 2 ;; --purpose) qs="$qs&purpose=$(printf '%s' "$2" | urlencode)"; shift 2 ;; --operator) qs="$qs&operator=$(printf '%s' "$2" | urlencode)"; shift 2 ;; --limit) qs="${qs/limit=20/limit=$2}"; shift 2 ;; *) usage ;; esac; done
     call GET "/api/v1/atlas/agents?$qs"
     ;;
-  atlas) OVERWING_API_KEY="" call GET /api/v1/atlas/summary ;;
+  atlas) TOKEN="" call GET /api/v1/atlas/summary ;;
+  tower)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      setup) require_key; call POST /api/v1/tower/template '{}' ;;
+      agent-create)
+        require_key
+        [ $# -ge 2 ] || usage
+        scopes=$(printf '%s' "$2" | tr ', ' '\n\n' | grep -v '^$' | while IFS= read -r sc; do printf '%s,' "$(printf '%s' "$sc" | json_escape)"; done)
+        [ -n "$scopes" ] || usage
+        call POST /api/v1/tower/agents "{\"name\":$(printf '%s' "$1" | json_escape),\"scopes\":[${scopes%,}]}"
+        ;;
+      agents) require_key; call GET /api/v1/tower/agents ;;
+      agent-revoke) require_key; [ $# -ge 1 ] || usage; call DELETE "/api/v1/tower/agents/$(printf '%s' "$1" | urlencode)" ;;
+      capabilities) require_agent_key; TOKEN="$OVERWING_AGENT_KEY" call GET /api/v1/tower/capabilities ;;
+      decide)
+        require_agent_key
+        [ $# -ge 2 ] || usage
+        require_object "$2" "input"
+        TOKEN="$OVERWING_AGENT_KEY" call POST /api/v1/tower/decide "{\"operation\":$(printf '%s' "$1" | json_escape),\"input\":$2}"
+        ;;
+      submit)
+        require_agent_key
+        [ $# -ge 2 ] || usage
+        op="$1"; input="$2"; shift 2
+        idem=""; dry=""
+        while [ $# -gt 0 ]; do case "$1" in --key) idem="$2"; shift 2 ;; --dry-run) dry=',"dry_run":true'; shift ;; *) usage ;; esac; done
+        require_object "$input" "input"
+        if [ -z "$idem" ]; then echo '{"error":{"code":"invalid_request","field":"idempotency_key","message":"--key is required","retryable":false,"suggested_fix":"Pass --key with something stable for this business request, such as the source message id"}}' >&2; exit 2; fi
+        # 422 is a ruling (rejected), not a failure: print it and let the caller read status.
+        TOKEN="$OVERWING_AGENT_KEY" ACCEPT="422" call POST /api/v1/tower/actions "{\"operation\":$(printf '%s' "$op" | json_escape),\"input\":$input,\"idempotency_key\":$(printf '%s' "$idem" | json_escape)$dry}"
+        ;;
+      get) require_agent_key; [ $# -ge 1 ] || usage; TOKEN="$OVERWING_AGENT_KEY" call GET "/api/v1/tower/actions/$(printf '%s' "$1" | urlencode)" ;;
+      compensate) require_agent_key; [ $# -ge 1 ] || usage; TOKEN="$OVERWING_AGENT_KEY" call POST "/api/v1/tower/actions/$(printf '%s' "$1" | urlencode)/compensate" '{}' ;;
+      receipt) require_agent_key; [ $# -ge 1 ] || usage; TOKEN="$OVERWING_AGENT_KEY" call GET "/api/v1/tower/receipts/$(printf '%s' "$1" | urlencode)" ;;
+      verify)
+        require_agent_key
+        qs=""
+        [ -n "${1:-}" ] && qs="?from=$(printf '%s' "$1" | urlencode)"
+        [ -n "${2:-}" ] && qs="$qs&to=$(printf '%s' "$2" | urlencode)"
+        TOKEN="$OVERWING_AGENT_KEY" call GET "/api/v1/tower/receipts/verify$qs"
+        ;;
+      *) usage ;;
+    esac
+    ;;
   *) usage ;;
 esac
