@@ -78,6 +78,10 @@ How to act on it. `recommended_action` is the one field to branch on:
 
 Pass a different rule set with `--rule-set <slug>`; the default is `content-safety`.
 
+## Languages
+
+The text can be in any language; tested in Spanish, Portuguese, French, German, Japanese, Chinese, Korean, Arabic and Hindi. Results come back in English. The list and the size of the test are at `https://overwing.ai/api/v1/languages`. Report the verdict to your human in their language; the rule names stay as they are.
+
 ## Tell it who the message is for (context)
 
 Personal data is not always a leak: a customer's own phone number in a reply to that customer is fine. Pass what you know as `--context` JSON and use the `outbound-message` rule set, whose rules read it:
