@@ -34,7 +34,7 @@ Pass your own agent name to `--agent` (`openclaw`, `cursor`, `codex`, or `'*'` f
 clawhub install overwing
 ```
 
-Then give the agent a key: set `OVERWING_API_KEY` (free at [overwing.ai/login](https://overwing.ai/login), 250 checks a day) or let the agent sign itself up with your permission. Agents holding a Base wallet can instead pay per request in USDC with no account.
+It works with no key for light use: 10 checks a day, and text sent without a key is not stored. For more, give the agent a key: set `OVERWING_API_KEY` (free at [overwing.ai/login](https://overwing.ai/login), 250 checks a day) or let the agent sign itself up with your permission. Agents holding a Base wallet can instead pay per request in USDC with no account.
 
 ## What the agent learns
 

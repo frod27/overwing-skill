@@ -3,7 +3,8 @@
 # responses exit 1 with the API's error body on stderr.
 #   OVERWING_API_KEY    organization key (ow_live_...): guardrails, Tower setup, higher Atlas limits
 #   OVERWING_AGENT_KEY  agent key (ow_agent_...): Tower operations
-# `who`, `agents`, `atlas`, `terms` and `signup` need no key.
+# `evaluate`, `who`, `agents`, `atlas`, `terms` and `signup` need no key.
+# Without a key, evaluate runs 10 times a day on inputs up to 2,000 characters, and the text is not stored.
 set -euo pipefail
 
 BASE_URL="${OVERWING_BASE_URL:-https://overwing.ai}"
@@ -15,6 +16,7 @@ usage() {
 Usage:
   overwing.sh evaluate [--rule-set <slug>] [--context '<json>'] "<text>"
                                                         score one text (or read text from stdin with "-")
+                                                        (no key needed: 10 a day, up to 2,000 characters)
   overwing.sh batch    [--rule-set <slug>] [--context '<json>']
                                                         JSON lines on stdin: {"id":"a","input":"..."}
   --context is a JSON object of facts the rules may read (recipient, channel,
@@ -91,7 +93,7 @@ ACCEPT=""
 call() {
   # call <method> <path> [json-body]
   local method="$1" path="$2" body="${3:-}" tmp code
-  local -a args=(-sS -m 60 -X "$method" "$BASE_URL$path" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.3 (openclaw)")
+  local -a args=(-sS -m 60 -X "$method" "$BASE_URL$path" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.4 (openclaw)")
   [ -n "$TOKEN" ] && args+=(-H "Authorization: Bearer $TOKEN")
   [ -n "$body" ] && args+=(-H "Content-Type: application/json" --data-binary "$body")
   tmp=$(mktemp)
@@ -104,7 +106,7 @@ call() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   evaluate)
-    require_key
+    # No key needed: the free allowance applies. A key lifts the limits.
     while [ $# -gt 0 ]; do
       case "$1" in
         --rule-set) RULE_SET="$2"; shift 2 ;;
@@ -131,7 +133,7 @@ case "$cmd" in
     body=$(printf '{"email":%s,"password":%s,"org_name":"OpenClaw agent"}' "$(printf '%s' "$1" | json_escape)" "$(printf '%s' "$2" | json_escape)")
     TOKEN="" call POST /api/v1/signup "$body"
     ;;
-  terms) TOKEN="" call GET /api/x402/evaluate ;;
+  terms) TOKEN="" call GET /.well-known/x402 ;;
   who)
     # No key needed. A key, when set, raises the daily allowance.
     [ $# -ge 1 ] || usage

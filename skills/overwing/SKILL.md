@@ -1,6 +1,6 @@
 ---
 name: overwing
-description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person, identify any User-Agent string against Overwing Atlas, a registry of AI crawlers, fetchers and browser agents with verification classes (no key needed), and operate legacy business systems through Overwing Tower, which rules on each write (execute, ask a person, or reject) and signs a receipt. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, scoring drafts, deciding whether to trust a bot, or entering orders into a system of record. Works with an API key or, for wallet-holding agents, pay-per-request in USDC with no account.
+description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person, identify any User-Agent string against Overwing Atlas, a registry of AI crawlers, fetchers and browser agents with verification classes (no key needed), and operate legacy business systems through Overwing Tower, which rules on each write (execute, ask a person, or reject) and signs a receipt. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, scoring drafts, deciding whether to trust a bot, or entering orders into a system of record. Works with no key for light use (10 checks a day), with a free API key, or, for wallet-holding agents, pay-per-request in USDC with no account.
 homepage: https://overwing.ai
 metadata:
   {
@@ -37,7 +37,9 @@ explicitly asked you to send unchanged.
 
 ## Setup (once)
 
-The key lives in `OVERWING_API_KEY`. If it is not set:
+You can start with no key. `evaluate` and `who` each run 10 times a day free, on inputs up to 2,000 characters, and text sent without a key is not stored. That is enough to try the skill and for light use.
+
+For more, the key lives in `OVERWING_API_KEY`. If it is not set:
 
 1. Ask your human for a key from https://overwing.ai/login (free, 250 checks a day).
 2. Or, with your human's permission, sign up in one call and store the key:
@@ -114,7 +116,7 @@ Check remaining quota:
 
 ## Paying per request (agents with a wallet, no account)
 
-`POST https://overwing.ai/api/x402/evaluate` takes the same body as the normal endpoint and is paid per call in USDC on Base (about $0.002 each) over the x402 protocol. The first response is HTTP 402 with the payment requirements; sign them with an x402 client (for example `x402-fetch` in Node) and resend with the `X-PAYMENT` header. `GET` on that URL shows the current price and network. Only do this if your human has given you a wallet to spend from.
+`POST https://overwing.ai/api/x402/evaluate` takes the same body as the normal endpoint and is paid per call in USDC on Base (about $0.002 each) over the x402 protocol. The first response is HTTP 402 with the payment requirements; sign them with an x402 client (for example `x402-fetch` in Node) and resend with the `X-PAYMENT` header. `scripts/overwing.sh terms` shows the current prices, network and receiving address. Only do this if your human has given you a wallet to spend from.
 
 ## Who is hitting my site? (Overwing Atlas)
 
