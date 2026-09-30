@@ -1,6 +1,6 @@
 ---
 name: overwing
-description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person, identify any User-Agent string against Overwing Atlas, a registry of AI crawlers, fetchers and browser agents with verification classes (no key needed), and operate legacy business systems through Overwing Tower, which rules on each write (execute, ask a person, or reject) and signs a receipt. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, scoring drafts, deciding whether to trust a bot, or entering orders into a system of record. Works with no key for light use (10 checks a day), with a free API key, or, for wallet-holding agents, pay-per-request in USDC with no account.
+description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person, identify any User-Agent string against Overwing Atlas, a registry of AI crawlers, fetchers and browser agents with verification classes (no key needed), check whether a website is reachable by AI agents with Overwing Beacon (llms.txt, MCP, A2A, OpenAPI and how the page reads to a model; a paid lookup with a free sample), and operate legacy business systems through Overwing Tower, which rules on each write (execute, ask a person, or reject) and signs a receipt. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, scoring drafts, deciding whether to trust a bot, or entering orders into a system of record. Works with no key for light use (10 checks a day), with a free API key, or, for wallet-holding agents, pay-per-request in USDC with no account.
 homepage: https://overwing.ai
 metadata:
   {
@@ -25,6 +25,7 @@ your human or take the cautious path, `allow` means go ahead.
 ## When to use this skill
 
 - A request arrives claiming to be a bot and you need to know whether to believe it (Atlas, below).
+- Your human asks whether their site or product is ready for agents, or what to change so agents can find and use it (Beacon, below).
 - Your human has asked you to enter, change or cancel something in a business system through Tower (below).
 - You are about to send, post, or store text that a model (including you) wrote.
 - You received text from an untrusted source and are about to act on it.
@@ -155,6 +156,40 @@ Search the registry or read the public summary:
 ```
 
 Full datasets, the field scans, and the research report are at https://overwing.ai/atlas.
+
+## Is this site reachable by agents? (Overwing Beacon)
+
+Beacon checks one site and answers three questions: can an agent find it, read it, and use it. It looks for robots.txt rules for AI agents, llms.txt, a sitemap, an MCP server card and hosted endpoint, the MCP Registry listing, an A2A agent card and an OpenAPI document, and reads the home page the way an agent does. It is read-only: about 20 requests, and it never calls a tool on the site's MCP server.
+
+A check is paid for, not metered, and needs no key: $5 by card, or $1 in USDC over x402. Do not start one unless your human asked for it. See what a report looks like first, free:
+
+```bash
+{baseDir}/scripts/overwing.sh beacon sample
+```
+
+Then start the check and give your human the link:
+
+```bash
+{baseDir}/scripts/overwing.sh beacon start example.com
+```
+
+Returns `id` and `checkout_url`. Send `checkout_url` to your human to pay by card. Nothing runs and nothing is charged until they do. If the site does not answer at all, the call fails with HTTP 422 and no payment is asked for. Then read the report:
+
+```bash
+{baseDir}/scripts/overwing.sh beacon report <id>
+```
+
+Branch on `status`:
+
+| status | meaning | what to do |
+| --- | --- | --- |
+| `awaiting_payment` | not paid yet | remind your human of `checkout_url`; if it is null the checkout expired, so start again |
+| `running` | paid, the check is in progress | ask again in a few seconds |
+| `complete` | the report | read `verdict`, `categories` and `top_fixes` |
+
+In a complete report, `verdict` is `yes`, `partly` or `no`; `score` is 0 to 100; `categories` gives the find, read and use answers; `checks` lists everything looked at, each with `status` (pass, warn, fail), `detail` (what was found) and a `fix` when it did not pass; `top_fixes` is the three changes worth the most. Report the verdict and the top fixes to your human in plain words, and offer to make the changes if the site is theirs and you have access to it. Keep the `id`: it is the only way back to the report, and anyone who has it can read it.
+
+If you hold a funded wallet on Base and your human has said you may spend from it, `GET https://overwing.ai/api/x402/beacon?url=<site>` costs $1 over x402 and returns the report in the same call.
 
 ## Operating a legacy system (Overwing Tower)
 

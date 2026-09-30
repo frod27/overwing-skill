@@ -8,7 +8,7 @@
 </p>
 
 <p align="center"><strong>Overwing skill for OpenClaw.</strong><br>
-Teaches your agent to check text for safety, personal data, self-harm, sexual content and severity before it sends, posts, or acts on it, to identify bots by their User-Agent, and to operate legacy systems through Overwing Tower. Verdicts are <code>pass</code> / <code>fail</code> / <code>review</code> with calibrated confidence, in under 500 ms.</p>
+Teaches your agent to check text for safety, personal data, self-harm, sexual content and severity before it sends, posts, or acts on it, to identify bots by their User-Agent, to check whether a site is reachable by agents, and to operate legacy systems through Overwing Tower. Verdicts are <code>pass</code> / <code>fail</code> / <code>review</code> with calibrated confidence, in under 500 ms.</p>
 
 <p align="center">
   <a href="https://clawhub.com/skills/overwing"><img alt="ClawHub" src="https://img.shields.io/badge/ClawHub-overwing-0B1220"></a>
@@ -44,6 +44,7 @@ It works with no key for light use: 10 checks a day, and text sent without a key
 - **What is stored**, and how to run a check without keeping the text (`--no-store`). Give the agent a key with scope `evaluate`, which can only run checks; see [overwing.ai/security](https://overwing.ai/security).
 - How limits and errors work, and how to pay per request over x402 if it has a wallet.
 - **Who is hitting a site**: `scripts/overwing.sh who "<user-agent>"` identifies a bot and says whether its claim can be verified. No key needed, 10 a day.
+- **Whether a site is reachable by agents**: `scripts/overwing.sh beacon start <site>` starts an [Overwing Beacon](https://overwing.ai/beacon) check and returns a checkout link for you ($5; agents with a wallet pay $1 over x402). The report says whether agents can find, read and use the site, and what to change first. A sample report is free.
 - **How to operate a legacy system safely** through [Overwing Tower](https://overwing.ai/products/tower): read its capabilities, submit a typed action with an idempotency key, and act on the ruling. It waits when a person must approve and does not retry a rejection.
 
 The skill is a single `SKILL.md` plus a small bash helper that needs only `curl`. Read it: [skills/overwing/SKILL.md](skills/overwing/SKILL.md).
