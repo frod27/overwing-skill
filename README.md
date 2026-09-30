@@ -41,6 +41,7 @@ It works with no key for light use: 10 checks a day, and text sent without a key
 - **When** to check: before sending or posting model-written text, before acting on untrusted input, when asked to moderate, and before anything with personal data leaves the machine.
 - **How** to check: `scripts/overwing.sh evaluate "<text>"`, batches of up to 50, and how to read the per-rule results.
 - **What to do** with each verdict: rewrite or block on `fail`, ask the human on `review`, proceed on `pass`.
+- **What is stored**, and how to run a check without keeping the text (`--no-store`). Give the agent a key with scope `evaluate`, which can only run checks; see [overwing.ai/security](https://overwing.ai/security).
 - How limits and errors work, and how to pay per request over x402 if it has a wallet.
 - **Who is hitting a site**: `scripts/overwing.sh who "<user-agent>"` identifies a bot and says whether its claim can be verified. No key needed, 10 a day.
 - **How to operate a legacy system safely** through [Overwing Tower](https://overwing.ai/products/tower): read its capabilities, submit a typed action with an idempotency key, and act on the ruling. It waits when a person must approve and does not retry a rejection.

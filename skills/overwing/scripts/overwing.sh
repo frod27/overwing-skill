@@ -10,17 +10,20 @@ set -euo pipefail
 BASE_URL="${OVERWING_BASE_URL:-https://overwing.ai}"
 RULE_SET="content-safety"
 CONTEXT=""
+NO_STORE=""
 
 usage() {
   cat >&2 <<USAGE
 Usage:
-  overwing.sh evaluate [--rule-set <slug>] [--context '<json>'] "<text>"
+  overwing.sh evaluate [--rule-set <slug>] [--context '<json>'] [--no-store] "<text>"
                                                         score one text (or read text from stdin with "-")
                                                         (no key needed: 10 a day, up to 2,000 characters)
-  overwing.sh batch    [--rule-set <slug>] [--context '<json>']
+  overwing.sh batch    [--rule-set <slug>] [--context '<json>'] [--no-store]
                                                         JSON lines on stdin: {"id":"a","input":"..."}
   --context is a JSON object of facts the rules may read (recipient, channel,
   owns_contact_info, sender, purpose); pair it with --rule-set outbound-message.
+  --no-store runs the check without keeping the text or the context (with a key;
+  without a key the text is never stored).
   overwing.sh usage                                     today's quota and remaining checks
   overwing.sh whoami                                    which organization this key belongs to
   overwing.sh signup <email> <password>                 create an account and print the API key (once)
@@ -54,6 +57,11 @@ json_escape() {
   python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || {
     local s; s=$(cat); s=${s//\\/\\\\}; s=${s//\"/\\\"}; s=${s//$'\n'/\\n}; s=${s//$'\t'/\\t}; printf '"%s"' "$s"
   }
+}
+
+store_field() {
+  # Emits ,"store":false when --no-store was given.
+  [ -z "$NO_STORE" ] || printf ',"store":false'
 }
 
 context_field() {
@@ -111,20 +119,21 @@ case "$cmd" in
       case "$1" in
         --rule-set) RULE_SET="$2"; shift 2 ;;
         --context) CONTEXT="$2"; shift 2 ;;
+        --no-store) NO_STORE=1; shift ;;
         -) text=$(cat); shift ;;
         *) text="$1"; shift ;;
       esac
     done
     [ -n "${text:-}" ] || usage
-    body=$(printf '{"input":%s,"rule_set":%s,"metadata":{"source":"openclaw-skill"}%s}' "$(printf '%s' "$text" | json_escape)" "$(printf '%s' "$RULE_SET" | json_escape)" "$(context_field)")
+    body=$(printf '{"input":%s,"rule_set":%s,"metadata":{"source":"openclaw-skill"}%s}' "$(printf '%s' "$text" | json_escape)" "$(printf '%s' "$RULE_SET" | json_escape)" "$(context_field)$(store_field)")
     call POST /api/v1/evaluate "$body"
     ;;
   batch)
     require_key
-    while [ $# -gt 0 ]; do case "$1" in --rule-set) RULE_SET="$2"; shift 2 ;; --context) CONTEXT="$2"; shift 2 ;; *) usage ;; esac; done
+    while [ $# -gt 0 ]; do case "$1" in --rule-set) RULE_SET="$2"; shift 2 ;; --context) CONTEXT="$2"; shift 2 ;; --no-store) NO_STORE=1; shift ;; *) usage ;; esac; done
     items=$(grep -v '^\s*$' | paste -sd, -)
     [ -n "$items" ] || usage
-    call POST /api/v1/evaluate/batch "{\"rule_set\":$(printf '%s' "$RULE_SET" | json_escape),\"items\":[$items]$(context_field)}"
+    call POST /api/v1/evaluate/batch "{\"rule_set\":$(printf '%s' "$RULE_SET" | json_escape),\"items\":[$items]$(context_field)$(store_field)}"
     ;;
   usage) require_key; call GET "/api/v1/usage?days=1" ;;
   whoami) require_key; call GET /api/v1/me ;;

@@ -52,6 +52,8 @@ The response contains `api_key`. Put it in `OVERWING_API_KEY` (or `skills.entrie
 
 If you hold a funded wallet on Base and have no key, see "Paying per request" below.
 
+The key you are given should be one that can only run checks. If your human is creating a key for you, ask for one with scope `evaluate` (dashboard, or `POST /api/v1/api-keys` with `{"name":"agent","scope":"evaluate"}`). It can evaluate, read rule sets and check usage, and nothing else, so a leaked key cannot read stored text or change the account. A call outside the scope answers HTTP 403.
+
 ## Evaluate one text
 
 ```bash
@@ -94,6 +96,16 @@ Personal data is not always a leak: a customer's own phone number in a reply to 
 
 Useful keys: `recipient` (who will read it), `channel` (email, chat, public post, sms), `owns_contact_info` (true if the recipient already owns the personal data in the text), `sender`, `purpose`. Any JSON object up to 8 KB works; the rules quote it back in their reasoning. The `outbound-message` set adds `unauthorized_pii` (redact) and `confidential_leak` (block: internal notes, credentials, pricing not meant for this recipient) to the safety checks. Without context, treat every personal detail as unauthorized and redact it.
 
+## What is stored
+
+Without a key, the text is never stored. With a key, the text, the context and the verdict are kept so your human can audit them, until they are deleted. When the text is sensitive and does not need to be kept, add `--no-store`: the check runs the same and only the verdict is recorded.
+
+```bash
+{baseDir}/scripts/overwing.sh evaluate --no-store "The text to check"
+```
+
+Your human can turn storage off for everything, or set a number of days after which evaluations are deleted, in the dashboard settings or with `PATCH /api/v1/org` (`store_inputs`, `retention_days`). The text is sent to Overwing and to its model provider, TypeSafe, to produce the verdict, and is not used to train models. Details: https://overwing.ai/security
+
 ## Evaluate many texts at once
 
 Up to 50 per call, one line of JSON per item on stdin:
@@ -109,6 +121,7 @@ Returns a summary plus per-item verdicts and recommended actions. Each item coun
 - Free accounts: 250 checks a day and 30 a minute; paid plans raise both. Responses carry `X-RateLimit-Remaining` and `X-Burst-Remaining`.
 - HTTP 429 means wait for the seconds in `Retry-After`, or tell your human the daily limit is reached (they can upgrade or buy prepaid credits at https://overwing.ai/dashboard/billing).
 - HTTP 401 means the key is missing or revoked. Ask your human; do not retry blindly.
+- HTTP 403 means the key's scope does not allow that call (an `evaluate` key can only run checks). Do not retry; tell your human if you need more.
 - HTTP 502 means the evaluation engine did not answer; retry once after a few seconds.
 - Every error body is `{"error": "human readable message"}`.
 
