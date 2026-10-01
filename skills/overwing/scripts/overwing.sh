@@ -34,10 +34,10 @@ Usage:
                                                         Atlas: search the registry of AI crawlers, fetchers and browser agents
   overwing.sh atlas                                     Atlas: registry counts, traffic shares, field-scan headlines (no key)
 
-  Beacon: is a site reachable by agents? (no key; one check costs \$5 by card, or \$1 over x402)
-  overwing.sh beacon sample                             a real report, free, to see what a check returns
-  overwing.sh beacon start <site>                       start a check; prints a checkout_url for a person to pay, and an id
-  overwing.sh beacon report <id>                        the report once paid (awaiting_payment and running are answers too)
+  Beacon: is a site reachable by agents? (free; no key: the summary; with OVERWING_API_KEY: the full report)
+  overwing.sh beacon sample                             a real report in full, to see what a check returns
+  overwing.sh beacon start <site>                       start a check; prints an id
+  overwing.sh beacon report <id>                        run the check and print the report (status "running": ask again)
 
   Tower setup (OVERWING_API_KEY):
   overwing.sh tower setup                               load the starter workflow (email PO to order entry)
@@ -106,7 +106,7 @@ ACCEPT=""
 call() {
   # call <method> <path> [json-body]
   local method="$1" path="$2" body="${3:-}" tmp code
-  local -a args=(-sS -m 60 -X "$method" "$BASE_URL$path" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.6 (openclaw)")
+  local -a args=(-sS -m 60 -X "$method" "$BASE_URL$path" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.7 (openclaw)")
   [ -n "$TOKEN" ] && args+=(-H "Authorization: Bearer $TOKEN")
   [ -n "$body" ] && args+=(-H "Content-Type: application/json" --data-binary "$body")
   tmp=$(mktemp)
@@ -160,17 +160,17 @@ case "$cmd" in
     ;;
   atlas) TOKEN="" call GET /api/v1/atlas/summary ;;
   beacon)
-    # No key: a check is paid for, not metered.
+    # Free. No key gives the summary; a key, when set, gives the full report and saves the check to that dashboard.
     sub="${1:-}"; shift || true
     case "$sub" in
       sample) TOKEN="" call GET /api/v1/beacon/sample ;;
       start)
         [ $# -ge 1 ] || usage
-        TOKEN="" call POST /api/v1/beacon/checks "{\"url\":$(printf '%s' "$1" | json_escape)}"
+        call POST /api/v1/beacon/checks "{\"url\":$(printf '%s' "$1" | json_escape)}"
         ;;
       report)
         [ $# -ge 1 ] || usage
-        TOKEN="" ACCEPT="402" call GET "/api/v1/beacon/checks/$(printf '%s' "$1" | urlencode)"
+        call GET "/api/v1/beacon/checks/$(printf '%s' "$1" | urlencode)"
         ;;
       *) usage ;;
     esac

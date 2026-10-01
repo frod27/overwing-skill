@@ -161,19 +161,19 @@ Full datasets, the field scans, and the research report are at https://overwing.
 
 Beacon checks one site and answers three questions: can an agent find it, read it, and use it. It looks for robots.txt rules for AI agents, llms.txt, a sitemap, an MCP server card and hosted endpoint, the MCP Registry listing, an A2A agent card and an OpenAPI document, and reads the home page the way an agent does. It is read-only: about 20 requests, and it never calls a tool on the site's MCP server.
 
-A check is paid for, not metered, and needs no key: $5 by card, or $1 in USDC over x402. Do not start one unless your human asked for it. See what a report looks like first, free:
+A check is free. With no key you get the summary: the verdict, the score, the three answers and the first fix. With `OVERWING_API_KEY` set you get the full report, and it is saved to that account's dashboard; the key is free (`overwing.sh signup`). A check sends about 20 requests to the site, so run one when your human asks about a site, not on your own. Up to 5 a day with no key, 30 with one. See what a full report looks like first:
 
 ```bash
 {baseDir}/scripts/overwing.sh beacon sample
 ```
 
-Then start the check and give your human the link:
+Then start the check:
 
 ```bash
 {baseDir}/scripts/overwing.sh beacon start example.com
 ```
 
-Returns `id` and `checkout_url`. Send `checkout_url` to your human to pay by card. Nothing runs and nothing is charged until they do. If the site does not answer at all, the call fails with HTTP 422 and no payment is asked for. Then read the report:
+Returns `id`, and `access`: `full` with a key, `summary` without. If the site does not answer at all, the call fails with HTTP 422. Then read the report; the first read runs the check, which takes about twenty seconds:
 
 ```bash
 {baseDir}/scripts/overwing.sh beacon report <id>
@@ -183,13 +183,12 @@ Branch on `status`:
 
 | status | meaning | what to do |
 | --- | --- | --- |
-| `awaiting_payment` | not paid yet | remind your human of `checkout_url`; if it is null the checkout expired, so start again |
-| `running` | paid, the check is in progress | ask again in a few seconds |
-| `complete` | the report | read `verdict`, `categories` and `top_fixes` |
+| `running` | the check is in progress | ask again in a few seconds |
+| `complete` | the report, or its summary | read `access`, `verdict`, `categories` and `top_fixes` |
 
-In a complete report, `verdict` is `yes`, `partly` or `no`; `score` is 0 to 100; `categories` gives the find, read and use answers; `checks` lists everything looked at, each with `status` (pass, warn, fail), `detail` (what was found) and a `fix` when it did not pass; `top_fixes` is the three changes worth the most. Report the verdict and the top fixes to your human in plain words, and offer to make the changes if the site is theirs and you have access to it. Keep the `id`: it is the only way back to the report, and anyone who has it can read it.
+With `access: "summary"` there is no `checks` list and `top_fixes` holds only the first fix; `counts` says how many checks and fixes the full report holds, and `full_report` says how to open it. Reading the same `id` again with a key returns the full report. In a full report, `verdict` is `yes`, `partly` or `no`; `score` is 0 to 100; `categories` gives the find, read and use answers; `checks` lists everything looked at, each with `status` (pass, warn, fail), `detail` (what was found) and a `fix` when it did not pass; `top_fixes` is the three changes worth the most. Report the verdict and the top fixes to your human in plain words, and offer to make the changes if the site is theirs and you have access to it. Keep the `id`: it is the way back to the report.
 
-If you hold a funded wallet on Base and your human has said you may spend from it, `GET https://overwing.ai/api/x402/beacon?url=<site>` costs $1 over x402 and returns the report in the same call.
+If you hold a funded wallet on Base and your human has said you may spend from it, `GET https://overwing.ai/api/x402/beacon?url=<site>` costs $1 over x402 and returns the full report in the same call, with no account.
 
 ## Operating a legacy system (Overwing Tower)
 
