@@ -43,13 +43,35 @@ You can start with no key. `evaluate` and `who` each run 10 times a day free, on
 For more, the key lives in `OVERWING_API_KEY`. If it is not set:
 
 1. Ask your human for a key from https://overwing.ai/login (free, 250 checks a day).
-2. Or, with your human's permission, sign up in one call and store the key:
+2. Or make your own account. It needs no email, and nothing is sent to anyone:
 
 ```bash
-{baseDir}/scripts/overwing.sh signup you@example.com 'a-password-of-12-or-more'
+{baseDir}/scripts/overwing.sh signup
 ```
 
-The response contains `api_key`. Put it in `OVERWING_API_KEY` (or `skills.entries.overwing.apiKey` in openclaw.json). Never print the key back into chat. Accounts made this way start at 50 checks a day until the email is confirmed.
+The response contains `api_key`. Put it in `OVERWING_API_KEY` (or `skills.entries.overwing.apiKey` in openclaw.json) straight away, and tell your human that you made the account and where the key is kept. Never print the key back into chat. The key is the account: there is no email on it, so there is no reset link. An account made this way gets 50 checks a day.
+
+Do not sign up with an email address unless your human gives you one and asks you to. `overwing.sh signup <email> <password>` sends a confirmation message to that address; never use an address its owner did not offer.
+
+### Proving a domain (optional)
+
+A domain you can prove you control takes the place of an email on your account. It raises the limit to 250 checks a day, opens full Beacon reports, and is the way back in if the key is lost. You need to be able to add a DNS record or a file on that domain, so this is usually a job for your human, or for you if you manage their site.
+
+```bash
+{baseDir}/scripts/overwing.sh domain start example.com
+```
+
+Returns `verification`: one value to publish, either as a TXT record (`verification.dns.name`, `verification.dns.value`) or as a file (`verification.http.url`, `verification.http.body`). Publish either one, then:
+
+```bash
+{baseDir}/scripts/overwing.sh domain verify
+```
+
+`status: "verified"` means it is done. An `error` that says no proof was found means the record is not visible yet; DNS can take a few minutes, and asking again is safe. One domain belongs to one account.
+
+If the key is ever lost, `overwing.sh recover start example.com` prints a new value to publish at the same domain, and `overwing.sh recover verify example.com` then revokes every old key and prints one new key, once. Neither needs a key.
+
+If your human wants a dashboard login for an account you made, `overwing.sh claim <their-email> <password>` attaches one. Use the email they give you; they get a confirmation message.
 
 If you hold a funded wallet on Base and have no key, see "Paying per request" below.
 
@@ -161,7 +183,7 @@ Full datasets, the field scans, and the research report are at https://overwing.
 
 Beacon checks one site and answers three questions: can an agent find it, read it, and use it. It looks for robots.txt rules for AI agents, llms.txt, a sitemap, an MCP server card and hosted endpoint, the MCP Registry listing, an A2A agent card and an OpenAPI document, and reads the home page the way an agent does. It is read-only: about 20 requests, and it never calls a tool on the site's MCP server.
 
-A check is free. With no key you get the summary: the verdict, the score, the three answers and the first fix. With `OVERWING_API_KEY` set you get the full report, and it is saved to that account's dashboard; the key is free (`overwing.sh signup`). A check sends about 20 requests to the site, so run one when your human asks about a site, not on your own. Up to 5 a day with no key, 30 with one. See what a full report looks like first:
+A check is free. With no key you get the summary: the verdict, the score, the three answers and the first fix. With `OVERWING_API_KEY` set you get the full report, and it is saved to that account; the key is free (`overwing.sh signup`). One exception: an account made with no email gets the summary until it has proved a domain (see Setup). A check sends about 20 requests to the site, so run one when your human asks about a site, not on your own. Up to 5 a day with no key, 30 with one. See what a full report looks like first:
 
 ```bash
 {baseDir}/scripts/overwing.sh beacon sample

@@ -3,7 +3,7 @@
 # responses exit 1 with the API's error body on stderr.
 #   OVERWING_API_KEY    organization key (ow_live_...): guardrails, Tower setup, higher Atlas limits
 #   OVERWING_AGENT_KEY  agent key (ow_agent_...): Tower operations
-# `evaluate`, `who`, `agents`, `atlas`, `terms` and `signup` need no key.
+# `evaluate`, `who`, `agents`, `atlas`, `terms`, `signup` and `recover` need no key.
 # Without a key, evaluate runs 10 times a day on inputs up to 2,000 characters, and the text is not stored.
 set -euo pipefail
 
@@ -26,7 +26,13 @@ Usage:
   without a key the text is never stored).
   overwing.sh usage                                     today's quota and remaining checks
   overwing.sh whoami                                    which organization this key belongs to
-  overwing.sh signup <email> <password>                 create an account and print the API key (once)
+  overwing.sh signup                                    create your own account, no email, and print the API key (once)
+  overwing.sh signup <email> <password>                 create an account a person signs in to, and print the API key (once)
+  overwing.sh domain start <domain>                     prove you control a domain: prints one value to publish there
+  overwing.sh domain verify                             look for it; a proved domain lifts the limits and recovers a lost key
+  overwing.sh recover start <domain>                    key lost: prints a value to publish at the proved domain (no key)
+  overwing.sh recover verify <domain>                   revokes the old keys and prints one new key (once)
+  overwing.sh claim <email> <password>                  a person takes charge of an account made with no email
   overwing.sh terms                                     pay-per-request price and network (x402)
   overwing.sh who "<user-agent string>"                 Atlas: what a User-Agent claims to be and whether to trust it
                                                         (no key needed: 10 a day; with OVERWING_API_KEY: 100 a day)
@@ -77,7 +83,7 @@ context_field() {
 
 require_key() {
   if [ -z "${OVERWING_API_KEY:-}" ]; then
-    echo '{"error":"OVERWING_API_KEY is not set. Ask your human for a key (https://overwing.ai/login) or run: overwing.sh signup <email> <password>"}' >&2
+    echo '{"error":"OVERWING_API_KEY is not set. Ask your human for a key (https://overwing.ai/login) or run: overwing.sh signup"}' >&2
     exit 1
   fi
 }
@@ -106,7 +112,7 @@ ACCEPT=""
 call() {
   # call <method> <path> [json-body]
   local method="$1" path="$2" body="${3:-}" tmp code
-  local -a args=(-sS -m 60 -X "$method" "$BASE_URL$path" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.7 (openclaw)")
+  local -a args=(-sS -m 60 -X "$method" "$BASE_URL$path" -H "Accept: application/json" -H "User-Agent: overwing-skill/1.8 (openclaw)")
   [ -n "$TOKEN" ] && args+=(-H "Authorization: Bearer $TOKEN")
   [ -n "$body" ] && args+=(-H "Content-Type: application/json" --data-binary "$body")
   tmp=$(mktemp)
@@ -143,9 +149,37 @@ case "$cmd" in
   usage) require_key; call GET "/api/v1/usage?days=1" ;;
   whoami) require_key; call GET /api/v1/me ;;
   signup)
-    [ $# -ge 2 ] || usage
-    body=$(printf '{"email":%s,"password":%s,"org_name":"OpenClaw agent"}' "$(printf '%s' "$1" | json_escape)" "$(printf '%s' "$2" | json_escape)")
+    # No arguments: an account with no email. Nothing is sent to anyone; the key is the account.
+    case $# in
+      0) body='{"org_name":"OpenClaw agent"}' ;;
+      2) body=$(printf '{"email":%s,"password":%s,"org_name":"OpenClaw agent"}' "$(printf '%s' "$1" | json_escape)" "$(printf '%s' "$2" | json_escape)") ;;
+      *) usage ;;
+    esac
     TOKEN="" call POST /api/v1/signup "$body"
+    ;;
+  domain)
+    require_key
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      start) [ $# -ge 1 ] || usage; call POST /api/v1/org/domain "{\"domain\":$(printf '%s' "$1" | json_escape)}" ;;
+      # 422 means the value is not at the domain yet: an answer, not a failure.
+      verify) ACCEPT="422" call POST /api/v1/org/domain/verify ;;
+      *) usage ;;
+    esac
+    ;;
+  recover)
+    sub="${1:-}"; shift || true
+    [ $# -ge 1 ] || usage
+    case "$sub" in
+      start) TOKEN="" call POST /api/v1/signup/recover "{\"domain\":$(printf '%s' "$1" | json_escape)}" ;;
+      verify) TOKEN="" ACCEPT="422" call POST /api/v1/signup/recover/verify "{\"domain\":$(printf '%s' "$1" | json_escape)}" ;;
+      *) usage ;;
+    esac
+    ;;
+  claim)
+    require_key
+    [ $# -ge 2 ] || usage
+    call POST /api/v1/org/claim "$(printf '{"email":%s,"password":%s}' "$(printf '%s' "$1" | json_escape)" "$(printf '%s' "$2" | json_escape)")"
     ;;
   terms) TOKEN="" call GET /.well-known/x402 ;;
   who)
