@@ -1,6 +1,6 @@
 ---
 name: overwing
-description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person, identify any User-Agent string against Overwing Atlas, a registry of AI crawlers, fetchers and browser agents with verification classes (no key needed), check whether a website is reachable by AI agents with Overwing Beacon (llms.txt, MCP, A2A, OpenAPI and how the page reads to a model; a paid lookup with a free sample), and operate legacy business systems through Overwing Tower, which rules on each write (execute, ask a person, or reject) and signs a receipt. One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, scoring drafts, deciding whether to trust a bot, or entering orders into a system of record. Works with no key for light use (10 checks a day), with a free API key, or, for wallet-holding agents, pay-per-request in USDC with no account.
+description: Check any text for safety, personal data, confidential leaks, self-harm, sexual content and severity before you send it, act on it, or show it to a person, identify any User-Agent string against Overwing Atlas, a registry of AI crawlers, fetchers and browser agents with verification classes (no key needed), and check whether a website is reachable by AI agents with Overwing Beacon (llms.txt, MCP, A2A, OpenAPI and how the page reads to a model; a paid lookup with a free sample). One API call returns a verdict, a recommended action (block, redact, review, allow) and per-rule results with calibrated confidence in under 500 ms. Pass context (who the recipient is, which channel, whether you own the data) so personal data the recipient already owns is not flagged. Use for moderating model output, screening incoming messages, scoring drafts, or deciding whether to trust a bot. Works with no key for light use (10 checks a day), with a free API key, or, for wallet-holding agents, pay-per-request in USDC with no account.
 homepage: https://overwing.ai
 metadata:
   {
@@ -26,7 +26,6 @@ your human or take the cautious path, `allow` means go ahead.
 
 - A request arrives claiming to be a bot and you need to know whether to believe it (Atlas, below).
 - Your human asks whether their site or product is ready for agents, or what to change so agents can find and use it (Beacon, below).
-- Your human has asked you to enter, change or cancel something in a business system through Tower (below).
 - You are about to send, post, or store text that a model (including you) wrote.
 - You received text from an untrusted source and are about to act on it.
 - Your human asks you to moderate, screen, or check content.
@@ -212,70 +211,6 @@ With `access: "summary"` there is no `checks` list and `top_fixes` holds only th
 
 If you hold a funded wallet on Base and your human has said you may spend from it, `GET https://overwing.ai/api/x402/beacon?url=<site>` costs $1 over x402 and returns the full report in the same call, with no account.
 
-## Operating a legacy system (Overwing Tower)
-
-Tower sits between you and a system of record such as an IBM i order-entry program. You do not write to the system. You ask Tower to perform a typed operation, and Tower rules on it: execute it, ask a person, or reject it. Every step is recorded in a signed receipt.
-
-Use it when your human has set up Tower and given you an agent key in `OVERWING_AGENT_KEY`. Do not use it to bypass a person: a pending action is waiting for someone on purpose.
-
-### 1. See what you may do
-
-```bash
-{baseDir}/scripts/overwing.sh tower capabilities
-```
-
-Returns the operations your key is scoped to. Each has an `input_schema` (JSON Schema) and, for writes, a `compensating_operation` that undoes it. Build your input from the schema. Do not guess field names.
-
-### 2. Submit the action
-
-```bash
-{baseDir}/scripts/overwing.sh tower submit create_order '{"customer_id":"C04471","lines":[{"sku":"FLT-2040","qty":24}],"total":300,"source":{"channel":"email","message_id":"<po-88213@example>"}}' --key "po-88213"
-```
-
-`--key` is the idempotency key and it is required. Use something stable for this business request, such as the source message id or the PO number. If you are unsure whether an earlier attempt went through, send the same key again: you get the original outcome back with `"replayed": true`, and nothing happens twice.
-
-Branch on `status`:
-
-| status | meaning | what to do |
-| --- | --- | --- |
-| `executed` | Tower ran it | `result` holds what the system returned, such as the order number. Report it. |
-| `pending` | a person must approve | Tell your human it is waiting, with the `review_id`. Check later with `tower get <action_id>`. Do not resubmit and do not try a different key. |
-| `rejected` | policy said no | Read `decision.reason` and the failed `decision.checks`. Do not retry the same request. Fix the input if the reason is fixable, otherwise tell your human. |
-| `failed` | the system refused or errored | Read `error`. Retry with the same key only if `error.retryable` is true. |
-
-Add `--dry-run` to see the ruling without executing or queueing anything. `tower decide <operation> '<input>'` does the same and returns only the decision.
-
-### 3. Undo, and prove what happened
-
-```bash
-{baseDir}/scripts/overwing.sh tower compensate <action_id>     # runs the compensating operation, once
-{baseDir}/scripts/overwing.sh tower verify                     # recomputes every hash and signature in the chain
-{baseDir}/scripts/overwing.sh tower receipt <id-or-sequence>   # one signed receipt
-```
-
-Only compensate when your human asks or when you are reversing your own mistake, and say that you did.
-
-### Tower errors
-
-Every Tower error has one shape, written for you to act on:
-
-```json
-{ "error": { "code": "forbidden_scope", "field": "operation", "message": "This agent is not scoped to 'update_order'", "retryable": false, "suggested_fix": "Ask the organization to add the operation to the agent's scopes" } }
-```
-
-Retry only when `retryable` is true, and keep the same `--key`. `forbidden_scope` and `unauthorized` are not yours to fix: tell your human. `invalid_input` names the `field` to correct against the schema. `quota_exceeded` means the month's free decisions are used up.
-
-### Setting Tower up (organization key)
-
-If your human asks you to set Tower up and has given you `OVERWING_API_KEY`:
-
-```bash
-{baseDir}/scripts/overwing.sh tower setup                                        # loads the starter order-entry workflow
-{baseDir}/scripts/overwing.sh tower agent-create order-intake create_order,cancel_order
-```
-
-`agent-create` prints the agent key once. Store it in `OVERWING_AGENT_KEY` and never print it back into chat. Ask for the narrowest scopes that do the job rather than `*`. `tower agents` lists agents and `tower agent-revoke <agent_id>` cuts one off at once. The starter workflow runs against a mock system, so it is safe to try. Pricing is $0.25 per executed action with 1,000 free decisions a month; details at https://overwing.ai/products/tower.
-
 ## Custom rules
 
 Your human can define rules in plain language (yes/no questions, classifications, or scored scales) at https://overwing.ai/dashboard/rule-sets or via `POST /api/v1/rule-sets`. Each rule carries an `action` (`block`, `redact`, or `review`) and may reference `context.*` fields in its wording. Then pass the slug with `--rule-set`. `GET https://overwing.ai/api/v1/rule-sets/outbound-message` is a complete context-aware example to copy from.
@@ -285,6 +220,6 @@ Your human can define rules in plain language (yes/no questions, classifications
 - Full guide for agents: https://overwing.ai/llms.txt
 - API reference: https://overwing.ai/docs
 - Prefer MCP? `npx -y overwing-mcp` exposes the same calls as tools.
-- Node or Python SDKs: `npm install overwing`, `pip install overwing`. Both include Atlas and Tower clients.
+- Node or Python SDKs: `npm install overwing`, `pip install overwing`. Both include Atlas clients.
 
 Verdicts are signals from a calibrated model, not guarantees. When the stakes are high and the recommended action is not `allow`, involve your human.

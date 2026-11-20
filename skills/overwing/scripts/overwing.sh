@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Overwing helper for agents. Requires curl. Prints JSON to stdout; non-2xx
 # responses exit 1 with the API's error body on stderr.
-#   OVERWING_API_KEY    organization key (ow_live_...): guardrails, Tower setup, higher Atlas limits
-#   OVERWING_AGENT_KEY  agent key (ow_agent_...): Tower operations
+#   OVERWING_API_KEY    organization key (ow_live_...): guardrails, higher Atlas limits
 # `evaluate`, `who`, `agents`, `atlas`, `terms`, `signup` and `recover` need no key.
 # Without a key, evaluate runs 10 times a day on inputs up to 2,000 characters, and the text is not stored.
 set -euo pipefail
@@ -44,21 +43,6 @@ Usage:
   overwing.sh beacon sample                             a real report in full, to see what a check returns
   overwing.sh beacon start <site>                       start a check; prints an id
   overwing.sh beacon report <id>                        run the check and print the report (status "running": ask again)
-
-  Tower setup (OVERWING_API_KEY):
-  overwing.sh tower setup                               load the starter workflow (email PO to order entry)
-  overwing.sh tower agent-create <name> <scope,scope>   create an agent; prints its key once ("*" = every operation)
-  overwing.sh tower agents                              list agents (keys are never shown)
-  overwing.sh tower agent-revoke <agent_id>             revoke an agent at once
-  Tower operations (OVERWING_AGENT_KEY):
-  overwing.sh tower capabilities                        operations you may call, with JSON Schema inputs
-  overwing.sh tower decide <operation> '<input json>'   how it would be ruled; no side effects
-  overwing.sh tower submit <operation> '<input json>' --key <idempotency-key> [--dry-run]
-                                                        executed, pending (a person must approve) or rejected
-  overwing.sh tower get <action_id>                     status and result
-  overwing.sh tower compensate <action_id>              undo an executed action, once
-  overwing.sh tower receipt <id|sequence>               one signed receipt
-  overwing.sh tower verify [from] [to]                  recompute the receipt chain's hashes and signatures
 USAGE
   exit 2
 }
